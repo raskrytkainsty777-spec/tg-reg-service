@@ -1,0 +1,13 @@
+[global]
+type = global
+user_agent = react-sip-asterisk
+
+[transport-tcp]
+type = transport
+protocol = tcp
+bind = 0.0.0.0:${ASTERISK_SIP_PORT:-5060}
+external_signaling_address = ${ASTERISK_EXTERNAL_HOST}
+external_signaling_port = ${ASTERISK_SIP_PORT:-5060}
+external_media_address = ${ASTERISK_EXTERNAL_HOST}
+
+#include pjsip_trunks.conf

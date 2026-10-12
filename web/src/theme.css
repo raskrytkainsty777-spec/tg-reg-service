@@ -1,0 +1,934 @@
+/*
+ * Фирменный стиль WALEAD v2 поверх Mantine (src/theme.ts). Значения — из
+ * design/WALEAD-DESIGN-SPEC.md и инлайн-стилей эталонов design/*.dc.html:
+ * страница #FAFAF7, карточки белые с рамкой 3px #1F1F1E.
+ * Классы m_… — внутренние классы Mantine 7.16 (общие для всех полей ввода,
+ * таблиц и т. п.), mantine-… — статические. Mantine подключён раньше, поэтому
+ * при равной специфичности побеждают правила отсюда
+ */
+
+:root {
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  margin: 0;
+  background: #fafaf7;
+  color: #1f1f1e;
+  font-family: Onest, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: #1f1f1e;
+}
+
+a:hover {
+  color: #6e5dd8;
+}
+
+/* ─── Стикеры ─────────────────────────────────────────────────── */
+
+/* Стикер: Unbounded 900, заливка цветом раздела */
+.wa-sticker {
+  display: inline-block;
+  font-family: Unbounded, sans-serif;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── KPI-ряды (KpiGrid / KpiCard в components/ui/wa.tsx) ─────────────────
+   Карточки ряда одной высоты и ровные, без поворота. Число не шире карточки:
+   cqi — доля ширины самой карточки, длинное «1 848,05 ₽» уменьшается, а не вылезает */
+
+.wa-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--wa-kpi-min, 200px), 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.wa-kpi {
+  container-type: inline-size;
+  min-width: 0;
+  border-radius: 22px;
+  padding: 18px 22px;
+}
+
+.wa-kpi-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wa-kpi-value {
+  font-size: clamp(32px, 2.8vw, 46px);
+  font-size: min(clamp(32px, 2.8vw, 46px), 20cqi);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  margin-top: 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wa-kpi-note {
+  font-size: 14px;
+  line-height: 1.35;
+  margin-top: 8px;
+}
+
+.wa-kpi-compact {
+  border-radius: 20px;
+  padding: 16px 20px;
+}
+
+.wa-kpi-compact .wa-kpi-label {
+  font-size: 12px;
+}
+
+.wa-kpi-compact .wa-kpi-value {
+  font-size: clamp(30px, 2.6vw, 42px);
+  font-size: min(clamp(30px, 2.6vw, 42px), 20cqi);
+  margin-top: 8px;
+}
+
+.wa-kpi-compact .wa-kpi-note {
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+/* Телефон: две колонки, карточки заметно меньше, непарная последняя — на всю строку */
+@media (max-width: 600px) {
+  .wa-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .wa-kpi-grid > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .wa-kpi,
+  .wa-kpi-compact {
+    border-radius: 18px;
+    padding: 12px 14px;
+  }
+
+  .wa-kpi .wa-kpi-label {
+    font-size: 11px;
+  }
+
+  .wa-kpi .wa-kpi-value {
+    font-size: 27px;
+    font-size: min(27px, 19cqi);
+    margin-top: 6px;
+  }
+
+  .wa-kpi .wa-kpi-note {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+}
+
+/* ─── Заголовки ─────────────────────────────────────────────────────────── */
+
+.m_8a5d1357 {
+  font-weight: 800;
+}
+
+h1.m_8a5d1357 {
+  letter-spacing: -0.045em;
+}
+
+h2.m_8a5d1357 {
+  letter-spacing: -0.04em;
+}
+
+h3.m_8a5d1357,
+h4.m_8a5d1357 {
+  letter-spacing: -0.02em;
+}
+
+/* ─── Кнопки: пилюли, 800, outline — рамка 3px ──────────────────────────── */
+
+.m_77c9d27d {
+  --button-height-xs: 38px;
+  --button-height-sm: 48px;
+  --button-height-md: 52px;
+  --button-height-lg: 56px;
+  --button-height-xl: 60px;
+  --button-height-compact-xs: 30px;
+  --button-height-compact-sm: 34px;
+  --button-height-compact-md: 38px;
+  --button-height-compact-lg: 42px;
+  --button-height-compact-xl: 46px;
+  --button-padding-x-xs: 16px;
+  --button-padding-x-sm: 22px;
+  --button-padding-x-md: 26px;
+  --button-padding-x-lg: 28px;
+  --button-padding-x-xl: 32px;
+  --button-padding-x-compact-xs: 12px;
+  --button-padding-x-compact-sm: 14px;
+  --button-padding-x-compact-md: 16px;
+  --button-padding-x-compact-lg: 18px;
+  --button-padding-x-compact-xl: 20px;
+
+  font-weight: 800;
+  letter-spacing: 0;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.m_77c9d27d:where(:disabled:not([data-loading]), [data-disabled]:not([data-loading])) {
+  border: 3px solid transparent;
+  background: #f1f1ee;
+  color: #b5b5b0;
+}
+
+/* Группа кнопок вплотную: внутренние рамки не двоятся */
+.m_80d6d844 > .m_77c9d27d:where(:not(:first-of-type)) {
+  border-inline-start-width: 0;
+}
+
+/* ─── Иконки-кнопки: круги ──────────────────────────────────────────────── */
+
+.m_8d3f4000 {
+  font-weight: 900;
+}
+
+.m_8d3f4000:where(:disabled:not([data-loading]), [data-disabled]:not([data-loading])) {
+  border: 3px solid #d8d8d3;
+  background: transparent;
+  color: #b5b5b0;
+}
+
+.m_8d3f4000:where(:disabled, [data-disabled])[data-variant='subtle'],
+.m_8d3f4000:where(:disabled, [data-disabled])[data-variant='transparent'] {
+  border-color: transparent;
+}
+
+/* ─── Статус-пилюли ─────────────────────────────────────────────────────── */
+
+.m_347db0ec:not([data-circle]) {
+  height: auto;
+  min-height: 0;
+  padding: var(--badge-padding-y, 5px) var(--badge-padding-x);
+}
+
+.m_347db0ec {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.m_347db0ec[data-variant='dot']::before {
+  display: none;
+}
+
+/* ─── Поля ввода: рамка 3px #111, radius 14 ─────────────────────────────── */
+
+.m_6c018570 {
+  --input-height-xs: 38px;
+  --input-height-sm: 48px;
+  --input-height-md: 52px;
+  --input-height-lg: 56px;
+  --input-height-xl: 60px;
+  --input-padding-y-xs: 6px;
+  --input-padding-y-sm: 10px;
+  --input-padding-y-md: 12px;
+  --input-padding-y-lg: 14px;
+  --input-padding-y-xl: 16px;
+  --input-padding: 16px;
+  --input-left-section-size: var(--input-left-section-width, 42px);
+  --input-right-section-size: var(--input-right-section-width, 42px);
+  --input-fz: 16px;
+}
+
+[data-mantine-color-scheme] .m_6c018570[data-variant='default'] {
+  --input-bd: #1f1f1e;
+  --input-bg: #ffffff;
+  --input-bd-focus: #1f1f1e;
+}
+
+[data-mantine-color-scheme] .m_6c018570[data-variant='filled'] {
+  --input-bd: transparent;
+  --input-bg: #f3f3f0;
+  --input-bd-focus: #1f1f1e;
+}
+
+[data-mantine-color-scheme] .m_6c018570 {
+  --input-disabled-bg: #f1f1ee;
+  --input-disabled-color: #8a8a85;
+}
+
+.m_8fb7ebe7 {
+  border-width: 3px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.m_6c018570[data-size='xs'] .m_8fb7ebe7 {
+  font-size: 14px;
+}
+
+.m_8fb7ebe7::placeholder {
+  color: #8a8a85;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.m_8fb7ebe7:disabled,
+.m_8fb7ebe7[data-disabled] {
+  border-color: #d8d8d3;
+  opacity: 1;
+}
+
+/* Поле с рамкой 3px: секции не налезают на рамку */
+.m_6c018570 {
+  --section-y: 3px;
+  --left-section-start: 3px;
+  --right-section-end: 3px;
+}
+
+.m_82577fc2 {
+  color: #1f1f1e;
+}
+
+/* Подписи: 15px/800, звёздочка оранжевая, подсказка — faint */
+.m_8fdc1311 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1f1f1e;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.m_78a94662 {
+  color: #e2683d;
+}
+
+.m_fe47ce59 {
+  font-size: 13px;
+  color: #8a8a85;
+  margin-bottom: 6px;
+}
+
+.m_8f816625 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2683d;
+}
+
+/* Пилюли в мультиселекте — как колонки таблицы в эталоне: чёрные */
+.m_7cda1cd6 {
+  background: #1f1f1e;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.m_ae386778 {
+  color: #ffffff;
+}
+
+/* ─── Выпадающие списки, меню, поповеры: рамка 3px ──────────────────────── */
+
+.m_88b62a41,
+.m_dc9b7c9f,
+.m_38a85659 {
+  border: 3px solid #1f1f1e;
+  box-shadow: none;
+}
+
+.m_88b62a41,
+.m_dc9b7c9f {
+  border-radius: 14px;
+  padding: 5px;
+}
+
+.m_92253aa5 {
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 9px 12px;
+}
+
+.m_92253aa5:where([data-combobox-selected]) {
+  background: #1f1f1e;
+  color: #ffffff;
+}
+
+.m_92253aa5:where(:hover:not([data-combobox-selected], [data-combobox-disabled])) {
+  background: #f3f3f0;
+}
+
+.m_99ac2aa1 {
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 9px 12px;
+}
+
+.m_99ac2aa1:where([data-hovered]) {
+  background: #f3f3f0;
+}
+
+.m_9bfac126 {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #66665f;
+}
+
+.m_efdf90cb {
+  border-color: #ececE8;
+  border-top-width: 2px;
+}
+
+/* Подсказки — чёрные */
+.m_1b3c8819 {
+  background: #1f1f1e;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+}
+
+/* ─── Карточки: рамка 3px #1F1F1E, radius 26, белые ───────────────────────────────── */
+
+:where([data-mantine-color-scheme]) .m_1b7284a3:where([data-with-border]) {
+  border: 3px solid #1f1f1e;
+}
+
+/* Контейнер с рамкой — всегда radius 26 (спецификация), даже если в коде меньше */
+.m_1b7284a3[data-with-border] {
+  border-radius: 26px;
+}
+
+.m_1b7284a3 {
+  box-shadow: none;
+}
+
+.m_599a2148:where([data-with-border]) {
+  border-top: 2px solid #ececE8;
+  border-bottom: 2px solid #ececE8;
+}
+
+/* Заголовок карточки (h3 в секции): 26px/800 */
+.m_599a2148 h3.m_8a5d1357 {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Таблицы: шапка 13px/800 с линией 3px, строки 68px, разделители 2px ── */
+
+.m_b23fa0ef {
+  --table-hover-color: #fafaf7;
+  --table-striped-color: transparent;
+  --table-border-color: #ececE8;
+  --table-horizontal-spacing: 14px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+:where([data-mantine-color-scheme='light']) .m_b23fa0ef {
+  --table-hover-color: #fafaf7;
+  --table-striped-color: transparent;
+  --table-border-color: #ececE8;
+}
+
+.m_4e7aa4f3 {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #66665f;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Сортировка в шапке — кнопки: регистр и разрядка как у подписи колонки */
+.m_4e7aa4f3 button {
+  text-transform: inherit;
+  letter-spacing: inherit;
+  font-weight: inherit;
+  font-size: inherit;
+}
+
+/* Пилюли в ячейках не переносим и не обрезаем — колонка шире пилюли */
+.m_4e7aa4ef .m_347db0ec,
+.m_4e7aa4ef .m_5add502a {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Фильтр-пилюля без значения: подсказка как значение — «Статус: все ▾» */
+.wa-pill-select::placeholder {
+  color: #1f1f1e;
+  font-weight: 700;
+}
+
+/* Линия 3px — под последней строкой шапки (шапка бывает в две строки) */
+.m_b242d975 > .m_4e7aa4fd {
+  border-bottom: none;
+}
+
+.m_b242d975 > .m_4e7aa4fd:last-child {
+  border-bottom: 3px solid #1f1f1e;
+}
+
+.m_b2404537 > .m_4e7aa4fd:where([data-with-row-border]) {
+  border-bottom: 2px solid #ececE8;
+}
+
+/* На страницах (не в модалках и поповерах): шапка 18px сверху и снизу,
+   строка 68px, плотная таблица (fz="xs") — 52px, поля по краям 26px */
+main .m_4e7aa4f3 {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+main .m_b2404537 > .m_4e7aa4fd > .m_4e7aa4ef {
+  height: 68px;
+}
+
+main .m_b23fa0ef[style*="font-size-xs"] > .m_b2404537 > .m_4e7aa4fd > .m_4e7aa4ef {
+  height: 52px;
+}
+
+main .m_4e7aa4ef:first-child,
+main .m_4e7aa4f3:first-child {
+  padding-inline-start: 26px;
+}
+
+main .m_4e7aa4ef:last-child,
+main .m_4e7aa4f3:last-child {
+  padding-inline-end: 26px;
+}
+
+.m_b242d975:where([data-sticky]) {
+  background: #ffffff;
+}
+
+/* Таблица с собственной рамкой — как карточка */
+.m_b23fa0ef[data-with-table-border] {
+  border-collapse: separate;
+  border: 3px solid #1f1f1e;
+  border-radius: 26px;
+  overflow: hidden;
+}
+
+/* Таблица в карточке без отступов: последняя строка без разделителя */
+.m_b2404537 > .m_4e7aa4fd:last-of-type {
+  border-bottom: none;
+}
+
+/* ─── Сегмент-контрол: подложка #F3F3F0, активный — чёрный ──────────────── */
+
+.m_cf365364 {
+  --sc-padding-xs: 6px 12px;
+  --sc-padding-sm: 10px 18px;
+  --sc-padding-md: 11px 22px;
+  --sc-padding-lg: 12px 34px;
+  --sc-padding-xl: 14px 36px;
+  background: #f3f3f0;
+  border-radius: 999px;
+  padding: 5px;
+  /* Не влезли пункты (телефон) — листаем вбок, а не обрезаем: у Mantine тут
+     overflow: hidden, и «Почты/Прокси/АДБ» фермы или «Без канала» сегмента
+     просто пропадали за краем */
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.m_cf365364::-webkit-scrollbar {
+  display: none;
+}
+
+/* Пункт не сжимаем: подпись с многоточием на телефоне нечитаема */
+.m_cf365364 .m_69686b9b {
+  flex-shrink: 0;
+}
+
+:where([data-mantine-color-scheme='light']) .m_cf365364 {
+  background-color: #f3f3f0;
+}
+
+.m_9e182ccd {
+  box-shadow: none;
+  border-radius: 999px;
+}
+
+.m_1738fcb2 {
+  font-weight: 700;
+  color: #66665f;
+  font-size: var(--sc-font-size);
+  border-radius: 999px;
+}
+
+.m_cf365364 .m_1738fcb2:where([data-active]) {
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.m_cf365364 .m_1738fcb2:where(:not([data-disabled], [data-active])):hover {
+  color: #1f1f1e;
+}
+
+/* Сегмент-контрол с активным пунктом тинтом раздела: className="wa-sc-orange" */
+.wa-sc-orange .m_9e182ccd {
+  background: #fbe6dd;
+}
+
+.wa-sc-orange .m_1738fcb2:where([data-active]) {
+  color: #a13f17;
+}
+
+/* Разделители между пунктами не нужны */
+.m_69686b9b::before {
+  display: none;
+}
+
+/* ─── Вкладки: сегмент-контрол (default/outline) и чёрные пилюли (pills) ── */
+
+.m_89d60db1 {
+  --tab-border-color: transparent;
+}
+
+.m_89d33d6d {
+  gap: 0;
+}
+
+.m_89d60db1:where([data-variant='default'], [data-variant='outline']) .m_89d33d6d {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  background: #f3f3f0;
+  border-radius: 999px;
+  padding: 5px;
+}
+
+.m_89d60db1:where([data-variant='default'], [data-variant='outline'])[data-orientation='horizontal'] {
+  display: flex;
+  flex-direction: column;
+}
+
+.m_89d60db1:where([data-variant='pills']) .m_89d33d6d {
+  gap: 8px;
+}
+
+.m_576c9d4::before,
+.m_6772fbd5::before {
+  display: none;
+}
+
+.m_4ec4dce6 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #1f1f1e;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  line-height: 1.25;
+}
+
+.m_89d60db1:where([data-variant='pills']) .m_4ec4dce6 {
+  padding: 11px 22px;
+}
+
+.m_4ec4dce6:where([data-active]) {
+  background: #1f1f1e;
+  color: #ffffff;
+}
+
+.m_4ec4dce6:where(:not([data-active], :disabled, [data-disabled])):hover {
+  background: #ececE8;
+  color: #1f1f1e;
+}
+
+.m_4ec4dce6:where(:disabled, [data-disabled]) {
+  color: #8a8a85;
+  opacity: 1;
+}
+
+.m_539e827b,
+.m_b59ab47c {
+  border: none;
+  margin: 0;
+}
+
+/* ─── Модалки и выдвижные панели ────────────────────────────────────────── */
+
+.m_54c44539,
+.m_fd1ab0aa:where(.m_54c44539) {
+  border: 3px solid #1f1f1e;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.m_b8a05bbd {
+  box-shadow: none;
+}
+
+.m_f11b401e[data-position='right'] .m_b8a05bbd,
+.m_b8a05bbd[data-position='right'] {
+  border-left: 3px solid #1f1f1e;
+}
+
+.m_f11b401e[data-position='left'] .m_b8a05bbd {
+  border-right: 3px solid #1f1f1e;
+}
+
+.m_b5489c3c {
+  padding-bottom: 18px;
+  gap: 16px;
+}
+
+.m_615af6c9 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Крестик — круг 44px с рамкой 3px */
+.m_606cb269 {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 3px solid #1f1f1e;
+  border-radius: 50%;
+  color: #1f1f1e;
+}
+
+.m_606cb269 svg {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 2.5;
+}
+
+.m_606cb269:hover {
+  background: #1f1f1e;
+  color: #ffffff;
+}
+
+/* ─── Чекбоксы, радио, переключатели ────────────────────────────────────── */
+
+.m_bf2d988c {
+  --checkbox-size-xs: 18px;
+  --checkbox-size-sm: 22px;
+  --checkbox-size-md: 26px;
+  --checkbox-size-lg: 30px;
+  --checkbox-size-xl: 36px;
+}
+
+.m_26063560 {
+  border: 3px solid #1f1f1e;
+  border-radius: 7px;
+}
+
+.m_26063560:checked {
+  border-color: #1f1f1e;
+}
+
+.m_26063560:disabled {
+  border-color: #d8d8d3;
+  background: #f1f1ee;
+}
+
+/* Подписи чекбоксов, радио и тумблеров: 16px/700, пояснение 13px faint */
+.m_8ee546b8 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f1f1e;
+}
+
+.m_328f68c0 {
+  font-size: 13px;
+  color: #8a8a85;
+}
+
+.m_8a3dbb89 {
+  border: 3px solid #1f1f1e;
+}
+
+/* Тумблер: дорожка 52×30, бегунок 24px; выключен — серый с обводкой бегунка */
+.m_5f93f3bb {
+  --switch-height-xs: 24px;
+  --switch-width-xs: 42px;
+  --switch-thumb-size-xs: 18px;
+  --switch-height-sm: 30px;
+  --switch-width-sm: 52px;
+  --switch-thumb-size-sm: 24px;
+  --switch-height-md: 30px;
+  --switch-width-md: 52px;
+  --switch-thumb-size-md: 24px;
+  --switch-height-lg: 34px;
+  --switch-width-lg: 60px;
+  --switch-thumb-size-lg: 28px;
+  --switch-label-font-size-sm: 16px;
+  --switch-label-font-size-md: 16px;
+}
+
+.m_9307d992 {
+  border: none;
+  background: #ececE8;
+  padding: 3px;
+}
+
+.m_926b4011:checked + .m_9307d992 {
+  background: var(--switch-bg, #3ba862);
+}
+
+.m_93039a1d {
+  background: #ffffff;
+  border: 2px solid #1f1f1e;
+  inset-inline-start: 3px;
+}
+
+.m_926b4011:checked + .m_9307d992 .m_93039a1d {
+  border-color: transparent;
+  inset-inline-start: calc(100% - var(--switch-thumb-size) - 3px);
+}
+
+/* ─── Пагинация: круги с рамкой 3px ─────────────────────────────────────── */
+
+.m_4addd315 {
+  --pagination-control-size-xs: 30px;
+  --pagination-control-size-sm: 38px;
+  --pagination-control-size-md: 38px;
+  --pagination-control-size-lg: 44px;
+  --pagination-control-fz: 15px;
+}
+
+.m_326d024a {
+  border: 3px solid #1f1f1e;
+  font-weight: 800;
+  color: #1f1f1e;
+}
+
+.m_326d024a:where([data-active]) {
+  background: #1f1f1e;
+  color: #ffffff;
+  border-color: #1f1f1e;
+}
+
+.m_326d024a:where(:disabled, [data-disabled]) {
+  border-color: #d8d8d3;
+  color: #b5b5b0;
+  opacity: 1;
+}
+
+/* ─── Инфо-блоки (Alert): жёлтая подложка без рамки ─────────────────────── */
+
+.m_66836ed3 {
+  padding: 16px 22px;
+  border: none;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.m_6a03f287 {
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.m_7fa78076 {
+  color: #1f1f1e;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ─── Уведомления ───────────────────────────────────────────────────────── */
+
+.m_a513464 {
+  border: 3px solid #1f1f1e;
+  box-shadow: none;
+  padding: 14px 18px;
+}
+
+.m_3feedf16 {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.m_3d733a3a {
+  color: #66665f;
+  font-size: 14px;
+}
+
+/* ─── Группы полей (Fieldset): рамка 3px, radius 22, заголовок 22px/800 внутри ─ */
+
+.m_e9408a47 {
+  border: 3px solid #1f1f1e;
+  border-radius: 22px;
+  padding: 22px 24px;
+  background: #ffffff;
+}
+
+.m_e9408a47 > .m_90794832 {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 16px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.m_e9408a47 > .m_90794832 + * {
+  clear: both;
+}
+
+/* Группа без заголовка — просто поля, без рамки */
+.m_e9408a47:not(:has(> .m_90794832)) {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+/* ─── Прочее ────────────────────────────────────────────────────────────── */
+
+.m_9bd7b098 {
+  border-bottom: 2px solid #ececE8;
+}
+
+.m_4ba585b8 {
+  font-weight: 800;
+}
+
+.m_1959ad01 {
+  border: 3px solid #1f1f1e;
+  font-weight: 800;
+}
+
+.m_db6d6462 {
+  background: #ececE8;
+}
+
+.m_849cf0da {
+  font-weight: 700;
+}
+
+/* Чипы-переключатели: пилюли 15px/800 */
+.m_be049a53 {
+  font-weight: 800;
+  border-width: 3px;
+}
+
+.m_f85678b6 {
+  font-weight: 800;
+}

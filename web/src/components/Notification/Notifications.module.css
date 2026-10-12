@@ -1,0 +1,10 @@
+/* Уведомление на тинте: иконка без круга-подложки, крестик под цвет текста */
+.icon {
+  background: transparent !important;
+}
+
+.closeButton {
+  @mixin hover {
+    background-color: rgba(0, 0, 0, 0.06);
+  }
+}

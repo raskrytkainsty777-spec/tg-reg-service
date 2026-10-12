@@ -1,0 +1,421 @@
+// Сервис регистрации Telegram-аккаунтов на облачных телефонах GeeLark.
+// Номер берётся из SIP-транка, почта — из пула, код Telegram приходит на
+// почту и звонком: звонок принимает Asterisk и отдаёт аудио в AudioSocket,
+// текст даёт SpeechKit. Таблицы Reg* и Farm* перенесены из lk.walead как есть,
+// чтобы код реги переехал без переделки
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Одна строка (id = 1): вход, ключи сервисов и настройки реги
+model Settings {
+  id Int @id @default(1)
+
+  // Вход в кабинет. Пароль по умолчанию admin — после первого входа просим сменить
+  adminLogin         String  @default("admin")
+  adminPasswordHash  String
+  mustChangePassword Boolean @default(true)
+  // Вход по токену (ссылкой ?token=…)
+  accessToken        String
+
+  // Ключ Yandex SpeechKit для потоковой расшифровки звонка с кодом
+  regSpeechkitApiKey  String?
+  // IMAP, с которого читаются коды Telegram на почтах
+  regImapHost         String? @default("imap.rambler.ru")
+  regImapPort         Int?    @default(993)
+  // SIP-провайдер транков: из этих полей и паролей транков собирается
+  // конфиг Asterisk (он забирает его сам через /internal/asterisk/pjsip)
+  regSipDomain        String? @default("ip.beeline.ru")
+  regSipAuthDomain    String? @default("ip.beeline.ru")
+  regSipOutboundProxy String? @default("ip.beeline.ru")
+  regSipIdentifyHost  String? @default("ip.beeline.ru")
+
+  // После регистрации: подписки на каналы и настройки Telegram
+  regChannels           String[] @default([])
+  regSubscribeCount     Int      @default(3)
+  regDisableMedia       Boolean  @default(true)
+  regDisablePowerSaving Boolean  @default(true)
+
+  // Имена новых аккаунтов. Пустой список — берём встроенный
+  regNameGender       String   @default("female")
+  regFemaleFirstNames String[] @default([])
+  regFemaleLastNames  String[] @default([])
+  regMaleFirstNames   String[] @default([])
+  regMaleLastNames    String[] @default([])
+
+  // GeeLark — облачные телефоны, Proxyma — мобильные прокси под страну телефона
+  farmGeelarkBaseUrl    String? @default("https://openapi.geelark.com/open/v1")
+  farmGeelarkApiKey     String?
+  farmProxymaApiKey     String?
+  farmProxymaPackageKey String?
+  farmProxymaGwHost     String?
+  farmProxymaPortLo     Int?
+  farmProxymaPortHi     Int?
+
+  // Когда Asterisk последний раз забирал конфиг (и какой) и присылал звонок
+  asteriskConfigAt   DateTime?
+  asteriskConfigHash String?
+  asteriskCallAt     DateTime?
+
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Регистрация ─────────────────────────────────────────────────────────
+
+enum RegProxyStatus {
+  unchecked
+  active
+  dead
+}
+
+// Статус номера и почты в пуле
+enum RegResourceStatus {
+  free
+  reserved
+  used
+  blocked
+  cooldown
+  used_no_call
+  no_call
+  paused
+}
+
+enum RegAccountStatus {
+  in_progress
+  registered
+  failed
+}
+
+enum RegFailureReason {
+  already_registered
+  no_call
+  other_error
+  invalid_sip_code
+  wrong_email
+  banned
+  flood
+  no_email_code
+  stuck
+  canceled
+}
+
+enum RegSipCallStatus {
+  waiting
+  streaming
+  ended
+  failed
+  rejected
+}
+
+// SOCKS5 для IMAP: почта ходит за кодом через свой прокси
+model RegProxy {
+  id            String         @id @default(cuid())
+  host          String
+  port          Int
+  username      String?
+  password      String?
+  label         String?
+  status        RegProxyStatus @default(unchecked)
+  lastCheckAt   DateTime?
+  lastLatencyMs Int?
+  lastError     String?
+  emails        RegEmail[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([status])
+}
+
+model RegEmail {
+  id              String            @id @default(cuid())
+  email           String            @unique
+  password        String
+  status          RegResourceStatus @default(free)
+  // Не пришёл код — почта отдыхает, после трёх таких раз блокируется
+  pausedUntil     DateTime?
+  failCount       Int               @default(0)
+  notes           String?
+  proxy           RegProxy?         @relation(fields: [proxyId], references: [id], onDelete: SetNull)
+  proxyId         String?
+  lastInboxSyncAt DateTime?
+  accounts        RegAccount[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status])
+  @@index([proxyId])
+}
+
+// SIP-транк: name — SIP-ID (логин у провайдера), он же приходит в DID звонка
+model RegTrunk {
+  id            String          @id @default(cuid())
+  name          String          @unique
+  sipPassword   String
+  // Свой outbound proxy транка; пусто — общий из настроек
+  outboundProxy String?
+  // Выключенный транк не попадает в конфиг Asterisk и не выдаёт номера
+  enabled       Boolean         @default(true)
+  notes         String?
+  // Замок: на транке идёт рега (звонок узнаём по транку). Пишется сырым SQL,
+  // чтобы не трогать updatedAt — по нему транки выдают номера по кругу
+  lockOwner     String?
+  lockUntil     DateTime?
+  phones        RegTrunkPhone[]
+  accounts      RegAccount[]
+  sipCalls      RegSipCall[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model RegTrunkPhone {
+  id          String            @id @default(cuid())
+  phone       String            @unique
+  status      RegResourceStatus @default(free)
+  pausedUntil DateTime?
+  notes       String?
+  trunk       RegTrunk          @relation(fields: [trunkId], references: [id], onDelete: Cascade)
+  trunkId     String
+  accounts    RegAccount[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status, pausedUntil])
+  @@index([trunkId, status])
+}
+
+// Попытка регистрации: комплект номер + почта + профиль под один телефон
+model RegAccount {
+  id               String            @id @default(cuid())
+  status           RegAccountStatus  @default(in_progress)
+  failureReason    RegFailureReason?
+  firstName        String
+  lastName         String
+  username         String            @unique
+  birthDate        DateTime
+  twoFaPassword    String
+  // Имя телефона, который регистрировал, и сам телефон
+  externalAgentId  String?
+  farmPhoneId      String?
+  accountCreatedAt DateTime?
+  // Код с почты, когда пришёл — повторно в ящик не ходим
+  emailCode        String?
+  emailCodeAt      DateTime?
+  // Номер копией: история аккаунта не теряется, если транк удалят
+  phone            String?
+  notes            String?
+  email            RegEmail          @relation(fields: [emailId], references: [id], onDelete: Restrict)
+  emailId          String
+  trunk            RegTrunk?         @relation(fields: [trunkId], references: [id], onDelete: SetNull)
+  trunkId          String?
+  trunkPhone       RegTrunkPhone?    @relation(fields: [trunkPhoneId], references: [id], onDelete: SetNull)
+  trunkPhoneId     String?
+  sipCalls         RegSipCall[]
+  events           RegAuditLog[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([trunkId, status])
+  @@index([trunkPhoneId])
+}
+
+model RegSipCall {
+  id           String             @id @default(cuid())
+  uuid         String             @unique
+  caller       String
+  did          String
+  status       RegSipCallStatus   @default(waiting)
+  rejectReason String?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  trunk        RegTrunk?          @relation(fields: [trunkId], references: [id], onDelete: SetNull)
+  trunkId      String?
+  account      RegAccount?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  accountId    String?
+  transcripts  RegSipTranscript[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([accountId, createdAt])
+  @@index([trunkId, createdAt])
+  @@index([status, createdAt])
+}
+
+model RegSipTranscript {
+  id        String     @id @default(cuid())
+  call      RegSipCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  callId    String
+  sequence  Int
+  text      String
+  final     Boolean    @default(true)
+  createdAt DateTime   @default(now())
+
+  @@unique([callId, sequence])
+}
+
+// История попытки: выдан, код с почты, звонок, завершён/сорван
+model RegAuditLog {
+  id         String      @id @default(cuid())
+  account    RegAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  accountId  String?
+  entityType String
+  entityId   String
+  action     String
+  payload    Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+// ─── Запуски регистрации ─────────────────────────────────────────────────
+// Кабинет ставит запуск в очередь, воркер забирает его сам и пишет ход
+// по телефонам сюда же
+
+enum RegRunStatus {
+  queued
+  running
+  canceling
+  done
+  done_with_errors
+  canceled
+  interrupted
+}
+
+enum RegRunPhoneStatus {
+  pending
+  running
+  ok
+  failed
+  skipped
+}
+
+model RegRun {
+  id             String        @id @default(cuid())
+  status         RegRunStatus  @default(queued)
+  groupId        String?
+  groupName      String?
+  concurrency    Int           @default(2)
+  errorsPerPhone Int           @default(8)
+  phones         RegRunPhone[]
+  createdAt      DateTime      @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  @@index([status, createdAt])
+}
+
+model RegRunPhone {
+  id          String            @id @default(cuid())
+  run         RegRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId       String
+  phone       FarmPhone         @relation(fields: [phoneId], references: [id], onDelete: Cascade)
+  phoneId     String
+  status      RegRunPhoneStatus @default(pending)
+  error       String?
+  lastStep    String?
+  // Шаги сценария: [{name, status, detail, at}]
+  steps       Json              @default("[]")
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  @@index([runId])
+  @@index([phoneId])
+}
+
+// ─── Телефоны ────────────────────────────────────────────────────────────
+// Один телефон — один Telegram-аккаунт, поэтому аккаунт — поля телефона
+
+enum FarmProxyStatus {
+  unchecked
+  ok
+  dead
+}
+
+enum FarmAccountState {
+  idle
+  working
+  temp_block
+  spam
+  frozen
+  logged_out
+  review
+  cold_blocked
+}
+
+model FarmGroup {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  color     String?
+  phones    FarmPhone[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model FarmPhone {
+  id          String  @id @default(cuid())
+  // Профиль в GeeLark: имя видно в списке (BE-61), geelarkId — id облака
+  profileName String
+  geelarkId   String? @unique
+  serialNo    String?
+  countryCode String?
+  countryName String?
+  timezone    String?
+  brand       String?
+  model       String?
+  imei        String?
+  androidVer  Int?
+
+  // Прокси Proxyma под страну телефона — живёт на самом телефоне
+  proxyHost       String?
+  proxyPort       Int?
+  proxyType       String?         @default("socks5")
+  proxyUser       String?
+  proxyPassword   String?
+  proxyStatus     FarmProxyStatus @default(unchecked)
+  proxyLatencyMs  Int?
+  proxyError      String?
+  proxyCheckedAt  DateTime?
+  proxyReplacedAt DateTime?
+
+  // Telegram-аккаунт телефона
+  accountPhone     String?          @unique
+  accountFirstName String?
+  accountLastName  String?
+  accountUsername  String?
+  accountStatus    FarmAccountState @default(idle)
+  statusReason     String?
+  registeredAt     DateTime?
+  lastLaunchedAt   DateTime?
+  lastError        String?
+
+  group     FarmGroup?       @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId   String?
+  events    FarmPhoneEvent[]
+  runPhones RegRunPhone[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([groupId, createdAt])
+  @@index([accountStatus])
+  @@index([accountUsername])
+}
+
+// История телефона: что случилось и скриншот экрана в момент косяка
+model FarmPhoneEvent {
+  id         String    @id @default(cuid())
+  phone      FarmPhone @relation(fields: [phoneId], references: [id], onDelete: Cascade)
+  phoneId    String
+  kind       String
+  detail     String?
+  // Скриншот как data URL: косяков немного, отдельное хранилище не нужно
+  screenshot String?
+  createdAt  DateTime  @default(now())
+
+  @@index([phoneId, createdAt])
+}

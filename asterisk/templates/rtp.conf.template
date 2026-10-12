@@ -1,0 +1,4 @@
+[general]
+rtpstart = ${ASTERISK_RTP_START:-10000}
+rtpend = ${ASTERISK_RTP_END:-10100}
+strictrtp = no

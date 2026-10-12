@@ -1,0 +1,88 @@
+# Сервис регистрации Telegram-аккаунтов: кабинет + API, воркер ADB, Asterisk, Postgres.
+# Запуск: cp .env.example .env → заполнить → docker compose up -d --build
+# С HTTPS «из коробки» (Caddy сам выпустит сертификат на DOMAIN):
+#   docker compose --profile https up -d --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tgreg
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
+      POSTGRES_DB: tgreg
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tgreg -d tgreg"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tgreg:${POSTGRES_PASSWORD}@postgres:5432/tgreg
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?задайте INTERNAL_TOKEN в .env}
+      JWT_SECRET: ${JWT_SECRET:-}
+      ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+    # Кабинет на хосте — для своего nginx/Caddy. По умолчанию только localhost
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  worker:
+    build: ./worker
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      API_URL: http://app:3000/api
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+    logging: *logging
+
+  asterisk:
+    build: ./asterisk
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      BACKEND_INTERNAL_URL: http://app:3000/api
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      TRUNKS_SYNC_INTERVAL: "30"
+      AUDIO_SOCKET_HOST: app
+      AUDIO_SOCKET_PORT: "9092"
+      ASTERISK_EXTERNAL_HOST: ${PUBLIC_IP:?задайте PUBLIC_IP в .env}
+      ASTERISK_SIP_PORT: ${SIP_PORT:-5060}
+      ASTERISK_RTP_PORTS: ${RTP_PORTS:-10000-10100}
+    # SIP и RTP пробрасываются 1:1: Asterisk пишет свои порты в Contact и SDP
+    ports:
+      - "${SIP_PORT:-5060}:${SIP_PORT:-5060}/tcp"
+      - "${RTP_PORTS:-10000-10100}:${RTP_PORTS:-10000-10100}/udp"
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      - app
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to app:3000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+
+volumes:
+  pgdata:
+  caddy_data:
