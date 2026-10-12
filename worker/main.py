@@ -18,6 +18,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("worker")
+# httpx пишет каждый запрос (опрос очереди — раз в 5 с), это шум
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 POLL_S = 5
 
