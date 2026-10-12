@@ -17,6 +17,9 @@ app.use("/", requireAuth);
 app.get("/", async (ctx) => ctx.json({ items: await listRuns() }));
 
 const createSchema = z.object({
+  // registration — новые аккаунты на пустых телефонах;
+  // restore — повторный вход в вылетевшие аккаунты отмеченных телефонов
+  kind: z.enum(["registration", "restore"]).default("registration"),
   groupId: z.string().nullable().optional(),
   phoneIds: z.array(z.string()).optional(),
   concurrency: z.number().int().min(1).max(20).default(2),
@@ -35,11 +38,17 @@ app.post("/", async (ctx) => {
 
   if (input.groupId && !group) throw new HTTPException(400, { message: "Группа не найдена" });
 
-  // Регистрируем только телефоны без аккаунта и с профилем в GeeLark
+  const restore = input.kind === "restore";
+
+  if (restore && !input.phoneIds?.length) {
+    throw new HTTPException(400, { message: "Отметьте телефоны, на которых восстановить вход" });
+  }
+
+  // Регистрируем только телефоны без аккаунта, восстанавливаем — только с аккаунтом
   const phones = await dbClient.farmPhone.findMany({
     where: {
       geelarkId: { not: null },
-      accountPhone: null,
+      accountPhone: restore ? { not: null } : null,
       ...(input.phoneIds?.length ? { id: { in: input.phoneIds } } : {}),
       ...(group ? { groupId: group.id } : {}),
     },
@@ -49,9 +58,11 @@ app.post("/", async (ctx) => {
 
   if (!phones.length) {
     throw new HTTPException(400, {
-      message: group
-        ? `В группе «${group.name}» нет телефонов без аккаунта`
-        : "Нет телефонов без аккаунта",
+      message: restore
+        ? "У отмеченных телефонов нет аккаунта — восстанавливать нечего"
+        : group
+          ? `В группе «${group.name}» нет телефонов без аккаунта`
+          : "Нет телефонов без аккаунта",
     });
   }
 
@@ -76,6 +87,7 @@ app.post("/", async (ctx) => {
 
   const run = await dbClient.regRun.create({
     data: {
+      kind: input.kind,
       groupId: group?.id ?? null,
       groupName: group?.name ?? null,
       concurrency: input.concurrency,

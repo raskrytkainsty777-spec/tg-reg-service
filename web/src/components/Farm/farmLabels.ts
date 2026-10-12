@@ -85,6 +85,8 @@ export const FAILURE_REASON: Record<FarmFailureReason, string> = {
   no_email_code: "Не пришёл код на почту",
   stuck: "Завис экран",
   canceled: "Отменено",
+  account_deleted: "Аккаунт удалён в Telegram",
+  no_code: "Код не пришёл",
 };
 
 export const failureReasonTitle = (reason: string | null | undefined) =>

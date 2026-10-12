@@ -34,8 +34,12 @@ export interface RunPhone {
   steps: RunStep[];
 }
 
+// registration — новые аккаунты; restore — повторный вход в вылетевшие
+export type RunKind = "registration" | "restore";
+
 export interface Run {
   id: string;
+  kind: RunKind;
   status: RunStatus;
   groupName: string | null;
   concurrency: number;
@@ -51,10 +55,13 @@ export interface Run {
 }
 
 export interface RunStartForm {
+  kind?: RunKind;
   // null — все группы
-  groupId: string | null;
+  groupId?: string | null;
+  // восстановление — только по отмеченным телефонам
+  phoneIds?: string[];
   concurrency: number;
-  errorsPerPhone: number;
+  errorsPerPhone?: number;
 }
 
 export const RunsService = {

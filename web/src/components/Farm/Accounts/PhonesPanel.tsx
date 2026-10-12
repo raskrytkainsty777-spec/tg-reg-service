@@ -26,10 +26,13 @@ import {
   IconFileDownload,
   IconHistory,
   IconPlugConnected,
+  IconRefresh,
   IconSwitchHorizontal,
   IconTrash,
 } from "@tabler/icons-react";
+import { useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
+import { useNavigate } from "react-router-dom";
 
 import {
   useCheckFarmPhoneProxy,
@@ -43,6 +46,7 @@ import {
   useReplaceFarmPhoneProxy,
 } from "../../../api/queries/farmAccounts.query";
 import type { FarmPhone } from "../../../api/services/farmAccounts.service";
+import { RunsService } from "../../../api/services/runs.service";
 import { downloadBlob, errorMessage, formatDateTime } from "../farmLabels";
 import { notification } from "../../Notification/Notification";
 import { CreatePhonesModal } from "./CreatePhonesModal";
@@ -103,6 +107,8 @@ export function PhonesPanel() {
   const { mutateAsync: deletePhones } = useDeleteFarmPhones();
   const { mutateAsync: checkProxy, isPending: checking } = useCheckFarmPhoneProxy();
   const { mutateAsync: replaceProxy } = useReplaceFarmPhoneProxy();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Цифры показываем по выбранной группе: оператор смотрит на свой кусок
   const stat = useMemo(() => {
@@ -271,6 +277,56 @@ export function PhonesPanel() {
     });
   };
 
+  /**
+   * Восстановить вход в вылетевший аккаунт: воркер включит телефон, забронирует
+   * транк его номера, введёт номер и примет код с почты аккаунта или звонком
+   */
+  const onRestore = (ids: string[]) => {
+    const withAccount = items.filter((item) => ids.includes(item.id) && item.account);
+
+    if (!withAccount.length) {
+      notification.error({ message: "У выбранных телефонов нет аккаунта — восстанавливать нечего" });
+      return;
+    }
+
+    modals.openConfirmModal({
+      title: `Восстановить аккаунт: ${withAccount.length}`,
+      children: (
+        <Stack gap="xs">
+          <Text size="sm">
+            На каждом телефоне войдём в аккаунт заново: бронируем транк его номера,
+            вводим номер, код примем звонком или с почты аккаунта. Почту вводить не нужно.
+          </Text>
+          <Text size="sm" c="gray.7">
+            Если аккаунт на телефоне на самом деле на месте — его не трогаем.
+          </Text>
+          {withAccount.length < ids.length && (
+            <Text size="sm" c="gray.7">
+              Без аккаунта, пропускаем: {ids.length - withAccount.length}
+            </Text>
+          )}
+        </Stack>
+      ),
+      labels: { confirm: "Запустить восстановление", cancel: "Отмена" },
+      confirmProps: { color: "orange" },
+      onConfirm: async () => {
+        try {
+          await RunsService.start({
+            kind: "restore",
+            phoneIds: withAccount.map((item) => item.id),
+            concurrency: Math.min(withAccount.length, 5),
+          });
+          setSelected([]);
+          await queryClient.invalidateQueries({ queryKey: ["runs"] });
+          notification.success({ message: "Восстановление запущено — ход на странице «Регистрация»" });
+          navigate("/registration");
+        } catch (err) {
+          notification.error({ message: errorMessage(err) });
+        }
+      },
+    });
+  };
+
   const onReplaceProxy = async (phone: FarmPhone) => {
     try {
       const proxy = await replaceProxy(phone.id);
@@ -369,6 +425,11 @@ export function PhonesPanel() {
               до {formatDateTime(account.blockedUntil)}
             </Text>
           )}
+          {account?.statusReason && account.status !== "working" && (
+            <Text size="xs" c="gray.6" mt={2} maw={220}>
+              {account.statusReason}
+            </Text>
+          )}
         </Table.Td>
 
         <Table.Td>
@@ -421,6 +482,14 @@ export function PhonesPanel() {
               >
                 История
               </Menu.Item>
+              {account && (
+                <Menu.Item
+                  leftSection={<IconRefresh size={14} />}
+                  onClick={() => onRestore([phone.id])}
+                >
+                  Восстановить аккаунт
+                </Menu.Item>
+              )}
               <Menu.Item
                 leftSection={<IconPlugConnected size={14} />}
                 disabled={checking}
@@ -569,6 +638,14 @@ export function PhonesPanel() {
             onClick={onCheckProxies}
           >
             Прокси
+          </Button>
+
+          <Button
+            color="orange"
+            leftSection={<IconRefresh size={16} />}
+            onClick={() => onRestore(selected)}
+          >
+            Восстановить аккаунт
           </Button>
 
           <Button

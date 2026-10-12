@@ -60,6 +60,7 @@ export const listRuns = async (take = 20) => {
 
     return {
       id: run.id,
+      kind: run.kind,
       status: run.status,
       groupName: run.groupName,
       concurrency: run.concurrency,

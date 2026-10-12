@@ -13,10 +13,10 @@ export const ACCOUNT_STATES: Record<
   idle: { label: "Пустой", color: "gray" },
   working: { label: "Зарегистрирован", color: "green" },
   temp_block: { label: "temp block", color: "yellow" },
-  spam: { label: "спам", color: "red" },
+  spam: { label: "бан", color: "red" },
   frozen: { label: "заморожен", color: "dark" },
-  logged_out: { label: "разлогин", color: "orange" },
-  review: { label: "разбор", color: "blue" },
+  logged_out: { label: "вылетел", color: "orange" },
+  review: { label: "проверить", color: "blue" },
   // Остался от фермы рассылок: писать незнакомым Telegram запретил бессрочно
   cold_blocked: { label: "только ответы", color: "orange" },
 };

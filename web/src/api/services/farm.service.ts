@@ -29,7 +29,9 @@ export type FarmFailureReason =
   | "flood"
   | "no_email_code"
   | "stuck"
-  | "canceled";
+  | "canceled"
+  | "account_deleted"
+  | "no_code";
 
 export type FarmLockStage =
   | "reserving"
@@ -286,6 +288,7 @@ export interface FarmAccountListParams extends FarmListParams {
 export interface FarmAccount {
   id: string;
   status: FarmAccountStatus;
+  kind: "registration" | "restore";
   failureReason: FarmFailureReason | null;
   firstName: string;
   lastName: string;

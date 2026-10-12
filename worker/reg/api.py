@@ -125,3 +125,20 @@ async def fail(account_id: str, outcome: str) -> None:
 async def complete(account_id: str, phone_id: str) -> bool:
     code, _ = await _call("POST", f"/reg/{account_id}/complete", json={"phoneId": phone_id})
     return 200 <= code < 300
+
+
+# ── восстановление входа ─────────────────────────────────────────────────────
+async def restore_check(phone_id: str) -> dict:
+    return (await _call("POST", "/restore/check", json={"phoneId": phone_id}))[1]
+
+
+async def restore_assign(phone_id: str) -> tuple[dict | None, str | None]:
+    """Попытка восстановления: номер телефона + почта аккаунта, транк номера заперт."""
+    code, body = await _call("POST", "/restore/assign", json={"phoneId": phone_id}, ok_codes=(400, 409))
+    if code == 201:
+        return body, None
+    return None, body.get("error") or f"http_{code}"
+
+
+async def set_status(phone_id: str, status: str, reason: str | None = None) -> None:
+    await _call("POST", f"/phones/{phone_id}/status", json={"status": status, "reason": reason})

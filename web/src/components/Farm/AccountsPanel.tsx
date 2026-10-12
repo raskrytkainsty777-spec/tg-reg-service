@@ -96,9 +96,18 @@ export function AccountsPanel() {
           {formatDateTime(account.createdAt)}
         </Table.Td>
         <Table.Td>
-          <Badge size="sm" fullWidth={false} color={label.color}>
-            {label.title}
-          </Badge>
+          <Group gap={4} wrap="nowrap">
+            <Badge size="sm" fullWidth={false} color={label.color}>
+              {account.kind === "restore" && account.status === "registered"
+                ? "Восстановлен"
+                : label.title}
+            </Badge>
+            {account.kind === "restore" && (
+              <Badge size="sm" fullWidth={false} variant="light" color="violet">
+                вход
+              </Badge>
+            )}
+          </Group>
         </Table.Td>
         <Table.Td fz="sm">
           {account.status === "failed"

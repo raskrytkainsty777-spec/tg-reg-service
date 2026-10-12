@@ -781,12 +781,14 @@ app.post("/trunks/mark-invalid-bulk", async (ctx) => {
 
 const accountWhere = (ctx: Context): Prisma.RegAccountWhereInput => {
   const status = ctx.req.query("status");
+  const kind = ctx.req.query("kind");
   const failureReason = ctx.req.query("failureReason");
   const period = ctx.req.query("period");
   const search = (ctx.req.query("search") ?? "").trim();
   const periodDays: Record<string, number> = { today: 0, "7d": 6, "30d": 29 };
 
   return {
+    ...(kind === "registration" || kind === "restore" ? { kind } : {}),
     ...(status && ["in_progress", "registered", "failed"].includes(status)
       ? { status: status as "in_progress" | "registered" | "failed" }
       : {}),
@@ -845,6 +847,7 @@ app.get("/accounts/export.csv", async (ctx) => {
 
   const header = [
     "id",
+    "kind",
     "status",
     "failureReason",
     "phone",
@@ -862,6 +865,7 @@ app.get("/accounts/export.csv", async (ctx) => {
   const rows = items.map((item) =>
     [
       item.id,
+      item.kind,
       item.status,
       item.failureReason,
       item.phone,

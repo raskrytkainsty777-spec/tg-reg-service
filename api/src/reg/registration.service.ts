@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type RegFailureReason } from "@prisma/client";
 
 import { dbClient } from "../core/db.js";
 import { generateAccountProfile } from "./generator.js";
@@ -110,6 +110,31 @@ const audit = (
       payload: data.payload,
     },
   });
+
+// Попытка восстановления входа: номер и почта принадлежат живому аккаунту,
+// их статусы не трогаем — закрываем только саму попытку
+const closeRestoreAttempt = async (
+  tx: Tx,
+  accountId: string,
+  status: "registered" | "failed",
+  failureReason: RegFailureReason | null,
+  action: string,
+) => {
+  await tx.regAccount.update({
+    where: { id: accountId },
+    data: { status, failureReason: status === "failed" ? failureReason : null },
+  });
+
+  await audit(tx, { accountId, entityId: accountId, action, payload: { restore: true } });
+};
+
+export class RestoreNotPossibleError extends Error {}
+
+export class TrunkBusyError extends Error {
+  constructor() {
+    super("trunk_busy");
+  }
+}
 
 const toPublicAccount = (
   account: Prisma.RegAccountGetPayload<{
@@ -299,12 +324,105 @@ export const assignRegistrationResources = async (
   throw new NoFreeRegistrationNumbersError();
 };
 
+/**
+ * Восстановление входа в вылетевший аккаунт телефона: тот же номер, та же
+ * почта, тот же профиль. Транк номера запирается (звонок с кодом узнаём по
+ * нему), статусы номера и почты не меняются — они принадлежат живому аккаунту
+ */
+// Можно ли восстановить вход: у телефона есть аккаунт, его номер — в
+// включённом транке, и есть регистрация этого номера (почта и профиль)
+export const restoreTarget = async (farmPhoneId: string) => {
+  const phone = await dbClient.farmPhone.findUniqueOrThrow({ where: { id: farmPhoneId } });
+
+  if (!phone.accountPhone) throw new RestoreNotPossibleError("no_account");
+
+  const trunkPhone = await dbClient.regTrunkPhone.findUnique({
+    where: { phone: phone.accountPhone },
+    include: { trunk: true },
+  });
+
+  if (!trunkPhone) throw new RestoreNotPossibleError("number_not_in_trunks");
+  if (!trunkPhone.trunk.enabled) throw new RestoreNotPossibleError("trunk_disabled");
+
+  const original = await dbClient.regAccount.findFirst({
+    where: { phone: phone.accountPhone, kind: "registration", status: "registered" },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!original) throw new RestoreNotPossibleError("no_registration_data");
+
+  return { phone: { ...phone, accountPhone: phone.accountPhone }, trunkPhone, original };
+};
+
+export const assignRestoreResources = async (farmPhoneId: string) => {
+  const { phone, trunkPhone, original } = await restoreTarget(farmPhoneId);
+
+  // Зависшая прошлая попытка по этому номеру — закрываем, иначе звонок уйдёт ей
+  const stale = await dbClient.regAccount.findMany({
+    where: { phone: phone.accountPhone, status: "in_progress" },
+    select: { id: true },
+  });
+
+  for (const item of stale) await releaseRegistration(item.id, "canceled");
+
+  if (!(await acquireTrunkLock(trunkPhone.trunkId, "pending"))) throw new TrunkBusyError();
+
+  try {
+    const account = await dbClient.$transaction(async (tx) => {
+      const created = await tx.regAccount.create({
+        data: {
+          kind: "restore",
+          restoreOfId: original.id,
+          status: "in_progress",
+          firstName: phone.accountFirstName ?? original.firstName,
+          lastName: phone.accountLastName ?? original.lastName,
+          username: phone.accountUsername ?? original.username,
+          birthDate: original.birthDate,
+          twoFaPassword: original.twoFaPassword,
+          externalAgentId: phone.profileName,
+          farmPhoneId: phone.id,
+          phone: phone.accountPhone,
+          emailId: original.emailId,
+          trunkId: trunkPhone.trunkId,
+          trunkPhoneId: trunkPhone.id,
+        },
+      });
+
+      await audit(tx, {
+        accountId: created.id,
+        entityId: created.id,
+        action: "restore_assigned",
+        payload: { restoreOfId: original.id, trunkId: trunkPhone.trunkId },
+      });
+
+      return created;
+    });
+
+    await replaceTrunkLock(trunkPhone.trunkId, account.id);
+
+    return toPublicAccount(
+      await dbClient.regAccount.findUniqueOrThrow({
+        where: { id: account.id },
+        include: { email: true, trunk: true, trunkPhone: true },
+      }),
+    );
+  } catch (error) {
+    await releaseTrunkLock(trunkPhone.trunkId);
+    throw error;
+  }
+};
+
 export const releaseRegistration = async (
   accountId: string,
   reason: RegistrationReleaseReason,
 ) => {
   const trunkId = await dbClient.$transaction(async (tx) => {
     const account = await tx.regAccount.findUniqueOrThrow({ where: { id: accountId } });
+
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "failed", reason === "other" ? "other_error" : "canceled", "released");
+      return account.trunkId;
+    }
 
     const emailStatus = reason === "email_rejected" ? "blocked" : "free";
     const phoneStatus = reason === "email_rejected" ? "cooldown" : "free";
@@ -345,6 +463,11 @@ export const releaseRegistration = async (
 export const markNoCall = async (accountId: string) => {
   const trunkId = await dbClient.$transaction(async (tx) => {
     const account = await tx.regAccount.findUniqueOrThrow({ where: { id: accountId } });
+
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "failed", "no_call", "no_call");
+      return account.trunkId;
+    }
 
     await tx.regAccount.update({
       where: { id: accountId },
@@ -402,6 +525,11 @@ export const markRegistrationNumberInvalid = async (params: {
       where: { trunkPhoneId: trunkPhone.id, status: "in_progress" },
       orderBy: { createdAt: "desc" },
     });
+
+    if (account?.kind === "restore") {
+      await closeRestoreAttempt(tx, account.id, "failed", "banned", "number_invalidated");
+      return account.trunkId;
+    }
 
     if (!account) {
       await audit(tx, {
@@ -467,6 +595,11 @@ export const markWrongEmail = async (accountId: string) => {
     // Уже завершён (например, неверным кодом) — не перетираем исходную причину
     if (account.status !== "in_progress") return null;
 
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "failed", "wrong_email", "wrong_email");
+      return account.trunkId;
+    }
+
     await tx.regAccount.update({
       where: { id: accountId },
       data: { status: "failed", failureReason: "wrong_email" },
@@ -503,6 +636,11 @@ export const completeRegistration = async (
 ) => {
   const trunkId = await dbClient.$transaction(async (tx) => {
     const account = await tx.regAccount.findUniqueOrThrow({ where: { id: accountId } });
+
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "registered", null, "restored");
+      return account.trunkId;
+    }
     const completedAt = accountCreatedAt ?? new Date();
 
     await tx.regAccount.update({
@@ -554,7 +692,7 @@ const markEmailCodeNoCall = async (accountId: string, receivedAt: Date) => {
   const trunkId = await dbClient.$transaction(async (tx) => {
     const account = await tx.regAccount.findUnique({ where: { id: accountId } });
 
-    if (!account || account.status !== "in_progress") return null;
+    if (!account || account.status !== "in_progress" || account.kind === "restore") return null;
 
     const callsCount = await tx.regSipCall.count({
       where: { accountId, status: { not: "rejected" }, createdAt: { gte: receivedAt } },
@@ -647,6 +785,11 @@ const markInvalidSipCode = async (accountId: string) => {
     const account = await tx.regAccount.findUnique({ where: { id: accountId } });
 
     if (!account || account.status !== "in_progress") return null;
+
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "failed", "invalid_sip_code", "invalid_sip_code");
+      return account.trunkId;
+    }
 
     await tx.regAccount.update({
       where: { id: accountId },
@@ -760,7 +903,9 @@ export type RegFailOutcome =
   | "no_email_code"
   | "no_call"
   | "stuck"
-  | "canceled";
+  | "canceled"
+  | "account_deleted"
+  | "no_code";
 
 type PoolStatus = "free" | "blocked" | "paused";
 
@@ -777,7 +922,12 @@ export const failRegistration = async (accountId: string, outcome: RegFailOutcom
     // Попытку уже закрыл бэкенд (например, нераспознанный код) — не перетираем
     if (!account || account.status !== "in_progress") return account?.trunkId ?? null;
 
-    const reason = outcome === "twofa" ? "already_registered" : outcome;
+    const reason: RegFailureReason = outcome === "twofa" ? "already_registered" : outcome;
+
+    if (account.kind === "restore") {
+      await closeRestoreAttempt(tx, accountId, "failed", reason, "failed");
+      return account.trunkId;
+    }
 
     let phoneData: { status: PoolStatus; pausedUntil: Date | null } = {
       status: "free",
@@ -792,7 +942,7 @@ export const failRegistration = async (accountId: string, outcome: RegFailOutcom
       phoneData = { status: "blocked", pausedUntil: null };
     } else if (outcome === "flood") {
       phoneData = { status: "paused", pausedUntil: new Date(now + FLOOD_PAUSE_MS) };
-    } else if (outcome === "stuck") {
+    } else if (outcome === "stuck" || outcome === "account_deleted" || outcome === "no_code") {
       phoneData = { status: "paused", pausedUntil: new Date(now + PHONE_PAUSE_MS) };
     } else if (outcome === "no_email_code") {
       phoneData = { status: "paused", pausedUntil: new Date(now + PHONE_PAUSE_MS) };
@@ -850,6 +1000,7 @@ export const releaseStaleRegistrations = async () => {
   // Раньше это был таймер в памяти процесса и терялся при перезапуске
   const waiting = await dbClient.regAccount.findMany({
     where: {
+      kind: "registration",
       status: "in_progress",
       emailCodeAt: { lt: new Date(Date.now() - EMAIL_CODE_CALL_WAIT_MS) },
     },

@@ -103,6 +103,9 @@ enum RegFailureReason {
   no_email_code
   stuck
   canceled
+  // Восстановление входа: аккаунта у номера больше нет / код не пришёл ни на почту, ни звонком
+  account_deleted
+  no_code
 }
 
 enum RegSipCallStatus {
@@ -189,14 +192,20 @@ model RegTrunkPhone {
   @@index([trunkId, status])
 }
 
-// Попытка регистрации: комплект номер + почта + профиль под один телефон
+// Попытка: регистрация (комплект номер + почта + профиль под один телефон) или
+// восстановление входа в уже зарегистрированный аккаунт — тот же номер и почта
 model RegAccount {
   id               String            @id @default(cuid())
+  // registration | restore
+  kind             String            @default("registration")
+  // Для восстановления — исходная регистрация этого номера
+  restoreOfId      String?
   status           RegAccountStatus  @default(in_progress)
   failureReason    RegFailureReason?
   firstName        String
   lastName         String
-  username         String            @unique
+  // У попыток восстановления юзернейм тот же, что у регистрации, поэтому не unique
+  username         String
   birthDate        DateTime
   twoFaPassword    String
   // Имя телефона, который регистрировал, и сам телефон
@@ -223,6 +232,8 @@ model RegAccount {
   @@index([status, createdAt])
   @@index([trunkId, status])
   @@index([trunkPhoneId])
+  @@index([username])
+  @@index([phone, status])
 }
 
 model RegSipCall {
@@ -297,6 +308,8 @@ enum RegRunPhoneStatus {
 
 model RegRun {
   id             String        @id @default(cuid())
+  // registration — новые аккаунты; restore — повторный вход в вылетевшие
+  kind           String        @default("registration")
   status         RegRunStatus  @default(queued)
   groupId        String?
   groupName      String?
@@ -311,18 +324,18 @@ model RegRun {
 }
 
 model RegRunPhone {
-  id          String            @id @default(cuid())
-  run         RegRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
-  runId       String
-  phone       FarmPhone         @relation(fields: [phoneId], references: [id], onDelete: Cascade)
-  phoneId     String
-  status      RegRunPhoneStatus @default(pending)
-  error       String?
-  lastStep    String?
+  id         String            @id @default(cuid())
+  run        RegRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId      String
+  phone      FarmPhone         @relation(fields: [phoneId], references: [id], onDelete: Cascade)
+  phoneId    String
+  status     RegRunPhoneStatus @default(pending)
+  error      String?
+  lastStep   String?
   // Шаги сценария: [{name, status, detail, at}]
-  steps       Json              @default("[]")
-  startedAt   DateTime?
-  finishedAt  DateTime?
+  steps      Json              @default("[]")
+  startedAt  DateTime?
+  finishedAt DateTime?
 
   @@index([runId])
   @@index([phoneId])

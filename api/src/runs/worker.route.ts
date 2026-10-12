@@ -9,7 +9,11 @@ import {
   AllRegistrationLinesBusyError,
   NoFreeRegistrationNumbersError,
   NoRegistrationResourcesError,
+  RestoreNotPossibleError,
+  TrunkBusyError,
   assignRegistrationResources,
+  assignRestoreResources,
+  restoreTarget,
   completeRegistration,
   failRegistration,
   getRegistrationEmailCode,
@@ -72,6 +76,7 @@ const runPayload = async (runId: string) => {
 
   return {
     id: run.id,
+    kind: run.kind,
     status: run.status,
     concurrency: run.concurrency,
     errorsPerPhone: run.errorsPerPhone,
@@ -86,15 +91,18 @@ const runPayload = async (runId: string) => {
   };
 };
 
-// Следующий запуск из очереди. Запуски идут по одному: телефонов и линий
-// на два параллельных запуска всё равно не хватит
+// Следующий запуск из очереди. Одновременно — один запуск каждого вида:
+// восстановление вылетевшего аккаунта не ждёт, пока доедет большая регистрация
 app.post("/runs/claim", async (ctx) => {
-  const busy = await dbClient.regRun.count({ where: { status: { in: ["running", "canceling"] } } });
-
-  if (busy) return ctx.json({ run: null });
+  const busyKinds = (
+    await dbClient.regRun.findMany({
+      where: { status: { in: ["running", "canceling"] } },
+      select: { kind: true },
+    })
+  ).map((run) => run.kind);
 
   const next = await dbClient.regRun.findFirst({
-    where: { status: "queued" },
+    where: { status: "queued", kind: { notIn: busyKinds } },
     orderBy: { createdAt: "asc" },
   });
 
@@ -219,6 +227,23 @@ app.get("/phones/:id", async (ctx) => {
   return ctx.json({ ...phone, hasAccount: Boolean(phone.accountPhone) });
 });
 
+// Состояние аккаунта телефона по итогу восстановления: вылетел, бан и т.п.
+const statusSchema = z.object({
+  status: z.enum(["idle", "working", "temp_block", "spam", "frozen", "logged_out", "review"]),
+  reason: z.string().nullable().optional(),
+});
+
+app.post("/phones/:id/status", async (ctx) => {
+  const input = parse(statusSchema, await ctx.req.json());
+
+  await dbClient.farmPhone.update({
+    where: { id: ctx.req.param("id") },
+    data: { accountStatus: input.status, statusReason: input.reason?.slice(0, 300) ?? null },
+  });
+
+  return ctx.json({ ok: true });
+});
+
 const eventSchema = z.object({
   kind: z.string().min(1),
   detail: z.string().optional().nullable(),
@@ -337,6 +362,54 @@ app.post("/reg/assign", async (ctx) => {
   }
 });
 
+// До включения телефона: восстановление вообще возможно? (без замка транка)
+app.post("/restore/check", async (ctx) => {
+  const input = parse(z.object({ phoneId: z.string().min(1) }), await ctx.req.json());
+
+  try {
+    const { trunkPhone } = await restoreTarget(input.phoneId);
+
+    return ctx.json({ ok: true, trunk: trunkPhone.trunk.name });
+  } catch (error) {
+    if (error instanceof RestoreNotPossibleError) return ctx.json({ ok: false, error: error.message });
+
+    throw error;
+  }
+});
+
+// Восстановление входа: тот же номер (его транк запирается), та же почта.
+// 409 trunk_busy — на транке идёт другая рега, воркер подождёт и спросит снова
+app.post("/restore/assign", async (ctx) => {
+  const input = parse(z.object({ phoneId: z.string().min(1) }), await ctx.req.json());
+
+  try {
+    const account = await assignRestoreResources(input.phoneId);
+    const started = await dbClient.regAccount.findUniqueOrThrow({
+      where: { id: account.accountId },
+      select: { createdAt: true },
+    });
+
+    return ctx.json(
+      {
+        account_id: account.accountId,
+        phone_number: account.phoneNumber,
+        email: account.email,
+        first_name: account.firstName,
+        last_name: account.lastName,
+        username: account.username,
+        trunk_name: account.trunkName,
+        started_at: started.createdAt.toISOString(),
+      },
+      201,
+    );
+  } catch (error) {
+    if (error instanceof TrunkBusyError) return ctx.json({ error: error.message }, 409);
+    if (error instanceof RestoreNotPossibleError) return ctx.json({ error: error.message }, 400);
+
+    throw error;
+  }
+});
+
 const accountState = async (accountId: string) =>
   dbClient.regAccount.findUnique({
     where: { id: accountId },
@@ -392,6 +465,8 @@ const failSchema = z.object({
     "no_call",
     "stuck",
     "canceled",
+    "account_deleted",
+    "no_code",
   ]),
 });
 
@@ -410,6 +485,19 @@ app.post("/reg/:id/complete", async (ctx) => {
   const account = await dbClient.regAccount.findUniqueOrThrow({ where: { id: accountId } });
 
   if (account.status === "in_progress") await completeRegistration(accountId);
+
+  // Восстановление: аккаунт тот же — имя и юзернейм не трогаем, только «снова в строю»
+  if (account.kind === "restore") {
+    await dbClient.farmPhone.update({
+      where: { id: input.phoneId },
+      data: { accountStatus: "working", statusReason: null, lastError: null },
+    });
+    await dbClient.farmPhoneEvent.create({
+      data: { phoneId: input.phoneId, kind: "restored", detail: `вход восстановлен: ${account.phone}` },
+    });
+
+    return ctx.json({ ok: true });
+  }
 
   const number = account.phone ?? null;
   const taken = number

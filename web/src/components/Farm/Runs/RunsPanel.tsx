@@ -46,10 +46,11 @@ function RunCard({ run, onOpenPhone }: RunCardProps) {
 
   const status = runStatus(run.status);
   const active = isRunActive(run.status);
+  const restore = run.kind === "restore";
 
   const confirmCancel = () =>
     modals.openConfirmModal({
-      title: "Остановить регистрацию",
+      title: restore ? "Остановить восстановление" : "Остановить регистрацию",
       centered: true,
       children: (
         <Text size="sm">
@@ -70,8 +71,10 @@ function RunCard({ run, onOpenPhone }: RunCardProps) {
       <Stack gap="sm">
         <Group justify="space-between" wrap="wrap" gap="xs">
           <Group gap={16} wrap="wrap">
-            <Sticker size={13} rotate={-2} color={WA.orange}>
-              {(run.groupName ?? "Все телефоны").toUpperCase()}
+            <Sticker size={13} rotate={-2} color={restore ? WA.purple : WA.orange}>
+              {restore
+                ? "ВОССТАНОВЛЕНИЕ ВХОДА"
+                : (run.groupName ?? "Все телефоны").toUpperCase()}
             </Sticker>
             <Badge fullWidth={false} color={status.color}>
               {status.title}
@@ -106,7 +109,7 @@ function RunCard({ run, onOpenPhone }: RunCardProps) {
             </b>
           </Text>
           <Text fz={15} c="green" fw={700}>
-            Зарегистрировано <b>{run.ok}</b>
+            {restore ? "Восстановлено" : "Зарегистрировано"} <b>{run.ok}</b>
           </Text>
           {!!run.failed && (
             <Text fz={15} c="red.7" fw={700}>
@@ -114,8 +117,8 @@ function RunCard({ run, onOpenPhone }: RunCardProps) {
             </Text>
           )}
           <Text fz={13} c="dimmed">
-            параллельно {run.concurrency} · ошибок на телефон до остановки{" "}
-            {run.errorsPerPhone}
+            параллельно {run.concurrency}
+            {!restore && ` · ошибок на телефон до остановки ${run.errorsPerPhone}`}
           </Text>
         </Group>
 
@@ -235,7 +238,7 @@ export function RunsPanel() {
       ) : !runs.length ? (
         <Card withBorder p="xl">
           <Center>
-            <Text c="gray.6">Регистрацию пока не запускали</Text>
+            <Text c="gray.6">Регистрацию и восстановление пока не запускали</Text>
           </Center>
         </Card>
       ) : (
