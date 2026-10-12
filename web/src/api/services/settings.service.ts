@@ -21,7 +21,17 @@ export interface RegistrationSettings {
   maleLastNames: string[];
 }
 
+// Пример профиля нового аккаунта по текущим настройкам имён
+export interface ProfilePreview {
+  firstName: string;
+  lastName: string;
+  username: string;
+}
+
 export const SettingsService = {
+  previewProfiles: async () =>
+    (await apiInstance.get<ProfilePreview[]>("/settings/registration/preview?count=8")).data,
+
   getRegistration: async () =>
     (await apiInstance.get<RegistrationSettings>("/settings/registration")).data,
 

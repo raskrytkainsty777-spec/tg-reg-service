@@ -1,20 +1,26 @@
 import { useEffect, useState } from "react";
 import {
   Accordion,
+  Button,
+  Group,
   SegmentedControl,
   SimpleGrid,
   Stack,
+  Table,
   Text,
   Textarea,
 } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
+import { IconRefresh } from "@tabler/icons-react";
 
 import {
   useGetRegistrationSettings,
   useUpdateRegistrationSettings,
 } from "../../api/queries/settings.query";
-import type {
-  NameGender,
-  RegistrationSettings,
+import {
+  SettingsService,
+  type NameGender,
+  type RegistrationSettings,
 } from "../../api/services/settings.service";
 import { errorMessage } from "../../helpers/errors";
 import { notification } from "../Notification/Notification";
@@ -49,6 +55,12 @@ const sameList = (a: string[], b: string[]) =>
 export function NamesSettings() {
   const { data: settings, isLoading } = useGetRegistrationSettings();
   const { mutateAsync: update, isPending } = useUpdateRegistrationSettings();
+  // Примеры по СОХРАНЁННЫМ настройкам: после сохранения пересобираются сами
+  const preview = useQuery({
+    queryKey: ["settings", "registration", "preview", settings],
+    queryFn: SettingsService.previewProfiles,
+    enabled: !!settings,
+  });
 
   const [gender, setGender] = useState<NameGender>("mixed");
   const [lists, setLists] = useState<Record<ListKey, string>>({
@@ -114,6 +126,41 @@ export function NamesSettings() {
         />
       </Stack>
 
+      <Stack gap={6}>
+        <Group justify="space-between" align="flex-end">
+          <div>
+            <Text fw={800} fz={15}>
+              Так будут выглядеть новые аккаунты
+            </Text>
+            <Text size="sm" c="gray.6">
+              Имя и фамилия — случайные из списков ниже, юзернейм собирается сам:
+              имя_фамилия_4 цифры латиницей. Ставится в Telegram после регистрации.
+            </Text>
+          </div>
+          <Button
+            variant="light"
+            size="xs"
+            leftSection={<IconRefresh size={14} />}
+            loading={preview.isFetching}
+            onClick={() => preview.refetch()}
+          >
+            Другие примеры
+          </Button>
+        </Group>
+        <Table withTableBorder verticalSpacing={6}>
+          <Table.Tbody>
+            {(preview.data ?? []).map((item) => (
+              <Table.Tr key={item.username}>
+                <Table.Td>
+                  {item.firstName} {item.lastName}
+                </Table.Td>
+                <Table.Td c="gray.7">@{item.username}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Stack>
+
       <Accordion variant="separated" chevronPosition="left">
         <Accordion.Item value="lists">
           <Accordion.Control>
@@ -128,7 +175,7 @@ export function NamesSettings() {
                 <Textarea
                   key={list.key}
                   label={list.label}
-                  description={`По одному на строку · ${toLines(lists[list.key]).length}`}
+                  description={`По одному на строку · ${toLines(lists[list.key]).length} · пусто — встроенный список`}
                   placeholder={list.placeholder}
                   autosize
                   minRows={6}

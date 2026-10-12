@@ -4,7 +4,14 @@ import { z } from "zod";
 import { requireAuth } from "./auth.js";
 import { dbClient } from "./db.js";
 import { factory } from "./factory.js";
-import { invalidateRegSettings } from "../reg/reg-settings.js";
+import {
+  FEMALE_FIRST_NAMES,
+  FEMALE_LAST_NAMES,
+  MALE_FIRST_NAMES,
+  MALE_LAST_NAMES,
+  generateAccountProfile,
+} from "../reg/generator.js";
+import { getRegSettings, invalidateRegSettings } from "../reg/reg-settings.js";
 
 // Что делать после регистрации (подписки, настройки Telegram) и из каких
 // имён собирать профили
@@ -12,6 +19,10 @@ import { invalidateRegSettings } from "../reg/reg-settings.js";
 const app = factory.createApp().basePath("/settings");
 
 app.use("/*", requireAuth);
+
+// Пустой список в базе значит «встроенный» — показываем его, чтобы было видно,
+// из чего на самом деле собираются профили
+const orDefault = (items: string[], fallback: string[]) => (items.length ? items : fallback);
 
 const view = async () => {
   const row = await dbClient.settings.findUniqueOrThrow({ where: { id: 1 } });
@@ -22,10 +33,10 @@ const view = async () => {
     disableMedia: row.regDisableMedia,
     disablePowerSaving: row.regDisablePowerSaving,
     nameGender: row.regNameGender,
-    femaleFirstNames: row.regFemaleFirstNames,
-    femaleLastNames: row.regFemaleLastNames,
-    maleFirstNames: row.regMaleFirstNames,
-    maleLastNames: row.regMaleLastNames,
+    femaleFirstNames: orDefault(row.regFemaleFirstNames, FEMALE_FIRST_NAMES),
+    femaleLastNames: orDefault(row.regFemaleLastNames, FEMALE_LAST_NAMES),
+    maleFirstNames: orDefault(row.regMaleFirstNames, MALE_FIRST_NAMES),
+    maleLastNames: orDefault(row.regMaleLastNames, MALE_LAST_NAMES),
   };
 };
 
@@ -55,6 +66,21 @@ const patchSchema = z.object({
 });
 
 app.get("/registration", async (ctx) => ctx.json(await view()));
+
+// Примеры профилей по текущим настройкам: какие имя, фамилию и юзернейм
+// получат новые аккаунты
+app.get("/registration/preview", async (ctx) => {
+  const count = Math.min(20, Math.max(1, Number(ctx.req.query("count") ?? 8) || 8));
+  const { names } = await getRegSettings();
+
+  return ctx.json(
+    Array.from({ length: count }, () => {
+      const profile = generateAccountProfile(names);
+
+      return { firstName: profile.firstName, lastName: profile.lastName, username: profile.username };
+    }),
+  );
+});
 
 app.patch("/registration", async (ctx) => {
   const parsed = patchSchema.safeParse(await ctx.req.json().catch(() => ({})));
