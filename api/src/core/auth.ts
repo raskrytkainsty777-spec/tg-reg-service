@@ -34,12 +34,21 @@ export const requireAuth: MiddlewareHandler = async (ctx, next) => {
 
   if (!token) throw new HTTPException(401, { message: "Нужно войти" });
 
+  let login = "";
+
   try {
     const payload = await verify(token, jwtSecret(), "HS256");
-    ctx.set("login", String(payload.sub ?? ""));
+    login = String(payload.sub ?? "");
   } catch {
     throw new HTTPException(401, { message: "Сессия истекла — войдите заново" });
   }
+
+  // Сессия выдана под прежним логином — после смены логина она не действует
+  if (login !== (await getSettingsRow()).adminLogin) {
+    throw new HTTPException(401, { message: "Сессия истекла — войдите заново" });
+  }
+
+  ctx.set("login", login);
 
   await next();
 };
